@@ -60,7 +60,7 @@ void Map::EraseKeyFrame(KeyFrame *pKF)
     // TODO: This only erase the pointer.
     // Delete the MapPoint
 }
-
+// 设置参考地图点
 void Map::SetReferenceMapPoints(const vector<MapPoint *> &vpMPs)
 {
     unique_lock<mutex> lock(mMutexMap);
@@ -102,13 +102,13 @@ long unsigned int Map::KeyFramesInMap()
     unique_lock<mutex> lock(mMutexMap);
     return mspKeyFrames.size();
 }
-
+// 获取参考地图点
 vector<MapPoint*> Map::GetReferenceMapPoints()
 {
     unique_lock<mutex> lock(mMutexMap);
     return mvpReferenceMapPoints;
 }
-
+// 获取最大帧索引值
 long unsigned int Map::GetMaxKFid()
 {
     unique_lock<mutex> lock(mMutexMap);

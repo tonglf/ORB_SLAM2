@@ -111,7 +111,7 @@ public:
     static bool weightComp( int a, int b){
         return a>b;
     }
-
+    // 比较关键帧的索引
     static bool lId(KeyFrame* pKF1, KeyFrame* pKF2){
         return pKF1->mnId<pKF2->mnId;
     }
@@ -209,9 +209,9 @@ protected:
     // Grid over the image to speed up feature matching
     std::vector< std::vector <std::vector<size_t> > > mGrid;
 
-    std::map<KeyFrame*,int> mConnectedKeyFrameWeights;
-    std::vector<KeyFrame*> mvpOrderedConnectedKeyFrames;
-    std::vector<int> mvOrderedWeights;
+    std::map<KeyFrame*,int> mConnectedKeyFrameWeights;      // 与其他关键帧的联系 （关键帧 : 权重）
+    std::vector<KeyFrame*> mvpOrderedConnectedKeyFrames;    // 有序关键帧，从大到小
+    std::vector<int> mvOrderedWeights;              // 有序权重，从大到小
 
     // Spanning Tree and Loop Edges
     bool mbFirstConnection;

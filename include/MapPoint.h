@@ -86,7 +86,7 @@ public:
     static long unsigned int nNextId;
     long int mnFirstKFid;
     long int mnFirstFrame;
-    int nObs;
+    int nObs;       // 用来记录被观测的次数
 
     // Variables used by the tracking
     float mTrackProjX;
@@ -118,8 +118,8 @@ protected:
      cv::Mat mWorldPos;
 
      // Keyframes observing the point and associated index in keyframe
-     std::map<KeyFrame*,size_t> mObservations;
-
+     std::map<KeyFrame*,size_t> mObservations;  // 存放观测关系的容器，把能够观测到该MapPoint的关键帧，
+                                                                                                    //  以及MapPoint在该关键帧中对应的索引值关联并存储起来
      // Mean viewing direction
      cv::Mat mNormalVector;
 
