@@ -73,14 +73,14 @@ private:
 
 
     // Keypoints from Reference Frame (Frame 1)
-    vector<cv::KeyPoint> mvKeys1;
+    vector<cv::KeyPoint> mvKeys1;       // 参考帧的特征点集合
 
     // Keypoints from Current Frame (Frame 2)
-    vector<cv::KeyPoint> mvKeys2;
+    vector<cv::KeyPoint> mvKeys2;        // 当前帧的特征点集合
 
     // Current Matches from Reference to Current
-    vector<Match> mvMatches12;
-    vector<bool> mvbMatched1;
+    vector<Match> mvMatches12;          // 匹配两帧特征点对应的索引  Match = pair<int,int>
+    vector<bool> mvbMatched1;           // 参考帧（Frame 1） 的特征点与当前帧（Frame 2）是否存在匹配，若匹配则该索引下对应为true
 
     // Calibration
     cv::Mat mK;

@@ -29,7 +29,7 @@
 
 namespace ORB_SLAM2
 {
-
+// 构造函数，设置参考帧，并设置初始化方法的参数（参考帧，计算矩阵得分时候的参数，RANSAC迭代次数）
 Initializer::Initializer(const Frame &ReferenceFrame, float sigma, int iterations)
 {
     mK = ReferenceFrame.mK.clone();
@@ -40,18 +40,18 @@ Initializer::Initializer(const Frame &ReferenceFrame, float sigma, int iteration
     mSigma2 = sigma*sigma;
     mMaxIterations = iterations;
 }
-
+// 执行初始化（当前帧，ORB计算的初步匹配结果，输出的旋转矩阵，输出的平移向量，）
 bool Initializer::Initialize(const Frame &CurrentFrame, const vector<int> &vMatches12, cv::Mat &R21, cv::Mat &t21,
-                             vector<cv::Point3f> &vP3D, vector<bool> &vbTriangulated)
+                             vector<cv::Point3f> &vP3D, vector<bool> &vbTriangulated)   // 三角化重投影成功的匹配点的3d点在相机1下的坐标，特征点中三角化投影是否成功的标志位
 {
     // Fill structures with current keypoints and matches with reference frame
     // Reference Frame: 1, Current Frame: 2
     mvKeys2 = CurrentFrame.mvKeysUn;
 
-    mvMatches12.clear();
+    mvMatches12.clear();    // mvMatches12储存着匹配点对在参考帧F1和当前帧F2中的序号
     mvMatches12.reserve(mvKeys2.size());
-    mvbMatched1.resize(mvKeys1.size());
-    for(size_t i=0, iend=vMatches12.size();i<iend; i++)
+    mvbMatched1.resize(mvKeys1.size()); // mvbMatched1记录每个特征点是否有匹配的特征点
+    for(size_t i=0, iend=vMatches12.size();i<iend; i++) // 步骤1：组织特征点对
     {
         if(vMatches12[i]>=0)
         {
@@ -62,7 +62,7 @@ bool Initializer::Initialize(const Frame &CurrentFrame, const vector<int> &vMatc
             mvbMatched1[i]=false;
     }
 
-    const int N = mvMatches12.size();
+    const int N = mvMatches12.size();   // 匹配点数
 
     // Indices for minimum set selection
     vector<size_t> vAllIndices;
@@ -78,7 +78,7 @@ bool Initializer::Initialize(const Frame &CurrentFrame, const vector<int> &vMatc
     mvSets = vector< vector<size_t> >(mMaxIterations,vector<size_t>(8,0));
 
     DUtils::Random::SeedRandOnce(0);
-
+    // 步骤2：在所有匹配特征点对中随机选择8对匹配特征点为一组，共选择mMaxIterations组
     for(int it=0; it<mMaxIterations; it++)
     {
         vAvailableIndices = vAllIndices;
@@ -91,7 +91,7 @@ bool Initializer::Initialize(const Frame &CurrentFrame, const vector<int> &vMatc
 
             mvSets[it][j] = idx;
 
-            vAvailableIndices[randi] = vAvailableIndices.back();
+            vAvailableIndices[randi] = vAvailableIndices.back();    // 把test点剔除，每次随机选择的点索引不一样
             vAvailableIndices.pop_back();
         }
     }
@@ -100,18 +100,18 @@ bool Initializer::Initialize(const Frame &CurrentFrame, const vector<int> &vMatc
     vector<bool> vbMatchesInliersH, vbMatchesInliersF;
     float SH, SF;
     cv::Mat H, F;
-
-    thread threadH(&Initializer::FindHomography,this,ref(vbMatchesInliersH), ref(SH), ref(H));
-    thread threadF(&Initializer::FindFundamental,this,ref(vbMatchesInliersF), ref(SF), ref(F));
+    // 步骤3：调用多线程分别用于计算fundamental matrix（本质矩阵）和homography（单应矩阵）
+    thread threadH(&Initializer::FindHomography,this,ref(vbMatchesInliersH), ref(SH), ref(H));  // 计算homograpy和得分
+    thread threadF(&Initializer::FindFundamental,this,ref(vbMatchesInliersF), ref(SF), ref(F));     // 计算fundamental和得分
 
     // Wait until both threads have finished
-    threadH.join();
+    threadH.join();      // 等待线程threadH，threadF结束才往下继续执行，等待SH，SF的结果
     threadF.join();
 
     // Compute ratio of scores
-    float RH = SH/(SH+SF);
+    float RH = SH/(SH+SF);      // 步骤4：计算得分比例，选取某个模型
 
-    // Try to reconstruct from homography or fundamental depending on the ratio (0.40-0.45)
+    // Try to reconstruct from homography or fundamental depending on the ratio (0.40-0.45)      步骤5：从H矩阵或F矩阵中恢复R,t
     if(RH>0.40)
         return ReconstructH(vbMatchesInliersH,H,mK,R21,t21,vP3D,vbTriangulated,1.0,50);
     else //if(pF_HF>0.6)
@@ -120,16 +120,16 @@ bool Initializer::Initialize(const Frame &CurrentFrame, const vector<int> &vMatc
     return false;
 }
 
-
+// 计算单应矩阵及其得分（匹配点中哪些可以通过H21重投影成功，得分，输出的单应矩阵）
 void Initializer::FindHomography(vector<bool> &vbMatchesInliers, float &score, cv::Mat &H21)
 {
     // Number of putative matches
-    const int N = mvMatches12.size();
+    const int N = mvMatches12.size();       // 假定匹配的数量
 
     // Normalize coordinates
-    vector<cv::Point2f> vPn1, vPn2;
+    vector<cv::Point2f> vPn1, vPn2;     // 归一化后的点
     cv::Mat T1, T2;
-    Normalize(mvKeys1,vPn1, T1);
+    Normalize(mvKeys1,vPn1, T1);    // 归一化
     Normalize(mvKeys2,vPn2, T2);
     cv::Mat T2inv = T2.inv();
 
@@ -145,10 +145,10 @@ void Initializer::FindHomography(vector<bool> &vbMatchesInliers, float &score, c
     float currentScore;
 
     // Perform all RANSAC iterations and save the solution with highest score
-    for(int it=0; it<mMaxIterations; it++)
+    for(int it=0; it<mMaxIterations; it++)       // 在所有RANSAC样本中寻找能够使重投影的点对数达到最多的样本
     {
         // Select a minimum set
-        for(size_t j=0; j<8; j++)
+        for(size_t j=0; j<8; j++)       // 获取8个点
         {
             int idx = mvSets[it][j];
 
@@ -156,10 +156,10 @@ void Initializer::FindHomography(vector<bool> &vbMatchesInliers, float &score, c
             vPn2i[j] = vPn2[mvMatches12[idx].second];
         }
 
-        cv::Mat Hn = ComputeH21(vPn1i,vPn2i);
+        cv::Mat Hn = ComputeH21(vPn1i,vPn2i);   // 计算本次RANSAC样本下的单应矩阵
         H21i = T2inv*Hn*T1;
         H12i = H21i.inv();
-
+        // 在参数 mSigma下，能够通过H21，H12重投影成功的点有哪些，并返回分数
         currentScore = CheckHomography(H21i, H12i, vbCurrentInliers, mSigma);
 
         if(currentScore>score)
@@ -171,16 +171,16 @@ void Initializer::FindHomography(vector<bool> &vbMatchesInliers, float &score, c
     }
 }
 
-
+// 计算基础矩阵及其得分（匹配点中哪些可以通过H21重投影成功，得分，输出的本质矩阵）（代码与上面很像）
 void Initializer::FindFundamental(vector<bool> &vbMatchesInliers, float &score, cv::Mat &F21)
 {
     // Number of putative matches
     const int N = vbMatchesInliers.size();
 
     // Normalize coordinates
-    vector<cv::Point2f> vPn1, vPn2;
+    vector<cv::Point2f> vPn1, vPn2;     // 归一化后的点
     cv::Mat T1, T2;
-    Normalize(mvKeys1,vPn1, T1);
+    Normalize(mvKeys1,vPn1, T1);    // 归一化
     Normalize(mvKeys2,vPn2, T2);
     cv::Mat T2t = T2.t();
 
@@ -222,7 +222,7 @@ void Initializer::FindFundamental(vector<bool> &vbMatchesInliers, float &score, 
     }
 }
 
-
+// 计算单应性矩阵(帧1中的特征点，帧2中的特征点)
 cv::Mat Initializer::ComputeH21(const vector<cv::Point2f> &vP1, const vector<cv::Point2f> &vP2)
 {
     const int N = vP1.size();
@@ -264,7 +264,7 @@ cv::Mat Initializer::ComputeH21(const vector<cv::Point2f> &vP1, const vector<cv:
 
     return vt.row(8).reshape(0, 3);
 }
-
+// 计算基础矩阵(帧1中的特征点，帧2中的特征点)
 cv::Mat Initializer::ComputeF21(const vector<cv::Point2f> &vP1,const vector<cv::Point2f> &vP2)
 {
     const int N = vP1.size();
@@ -301,7 +301,7 @@ cv::Mat Initializer::ComputeF21(const vector<cv::Point2f> &vP1,const vector<cv::
 
     return  u*cv::Mat::diag(w)*vt;
 }
-
+// 评估单应性矩阵(单应矩阵，单应矩阵的逆，匹配点重投影是否成功的标志位，计算得分时需要的参数)
 float Initializer::CheckHomography(const cv::Mat &H21, const cv::Mat &H12, vector<bool> &vbMatchesInliers, float sigma)
 {   
     const int N = mvMatches12.size();
@@ -330,11 +330,11 @@ float Initializer::CheckHomography(const cv::Mat &H21, const cv::Mat &H12, vecto
 
     float score = 0;
 
-    const float th = 5.991;
+    const float th = 5.991;     // 判断通过单应矩阵重投影是否成功的阈值
 
     const float invSigmaSquare = 1.0/(sigma*sigma);
 
-    for(int i=0; i<N; i++)
+    for(int i=0; i<N; i++)  // 遍历所有N对特征匹配点
     {
         bool bIn = true;
 
@@ -348,15 +348,15 @@ float Initializer::CheckHomography(const cv::Mat &H21, const cv::Mat &H12, vecto
 
         // Reprojection error in first image
         // x2in1 = H12*x2
-
+        // 将图像2中的特征点单应到图像1中
         const float w2in1inv = 1.0/(h31inv*u2+h32inv*v2+h33inv);
         const float u2in1 = (h11inv*u2+h12inv*v2+h13inv)*w2in1inv;
         const float v2in1 = (h21inv*u2+h22inv*v2+h23inv)*w2in1inv;
-
+        // 计算u2，v2投影到F1后与u1,v1的距离的平方，也就是重投影误差
         const float squareDist1 = (u1-u2in1)*(u1-u2in1)+(v1-v2in1)*(v1-v2in1);
-
+        // 根据方差归一化误差
         const float chiSquare1 = squareDist1*invSigmaSquare;
-
+        // chiSquare1>th说明匹配的点对F1投影到F2，重投影失败
         if(chiSquare1>th)
             bIn = false;
         else
@@ -364,7 +364,7 @@ float Initializer::CheckHomography(const cv::Mat &H21, const cv::Mat &H12, vecto
 
         // Reprojection error in second image
         // x1in2 = H21*x1
-
+         // 将图像1中的特征点单应到图像2中
         const float w1in2inv = 1.0/(h31*u1+h32*v1+h33);
         const float u1in2 = (h11*u1+h12*v1+h13)*w1in2inv;
         const float v1in2 = (h21*u1+h22*v1+h23)*w1in2inv;
@@ -378,7 +378,7 @@ float Initializer::CheckHomography(const cv::Mat &H21, const cv::Mat &H12, vecto
         else
             score += th - chiSquare2;
 
-        if(bIn)
+        if(bIn)     // bIn标志着此对匹配点是否重投影成功
             vbMatchesInliers[i]=true;
         else
             vbMatchesInliers[i]=false;
@@ -386,7 +386,7 @@ float Initializer::CheckHomography(const cv::Mat &H21, const cv::Mat &H12, vecto
 
     return score;
 }
-
+// 评估基础矩阵(基础矩阵，匹配点重投影是否成功的标志位，计算得分时需要的参数)
 float Initializer::CheckFundamental(const cv::Mat &F21, vector<bool> &vbMatchesInliers, float sigma)
 {
     const int N = mvMatches12.size();
@@ -424,11 +424,11 @@ float Initializer::CheckFundamental(const cv::Mat &F21, vector<bool> &vbMatchesI
 
         // Reprojection error in second image
         // l2=F21x1=(a2,b2,c2)
-
+        // F21*x1可以算出x1在图像中x2对应的线l
         const float a2 = f11*u1+f12*v1+f13;
         const float b2 = f21*u1+f22*v1+f23;
         const float c2 = f31*u1+f32*v1+f33;
-
+        // x2应该在l这条线上:x2点乘l = 0
         const float num2 = a2*u2+b2*v2+c2;
 
         const float squareDist1 = num2*num2/(a2*a2+b2*b2);
@@ -466,27 +466,27 @@ float Initializer::CheckFundamental(const cv::Mat &F21, vector<bool> &vbMatchesI
 
     return score;
 }
-
+// 从基础矩阵恢复位姿
 bool Initializer::ReconstructF(vector<bool> &vbMatchesInliers, cv::Mat &F21, cv::Mat &K,
                             cv::Mat &R21, cv::Mat &t21, vector<cv::Point3f> &vP3D, vector<bool> &vbTriangulated, float minParallax, int minTriangulated)
 {
-    int N=0;
+    int N=0;    // N，通过H重投影成功的数量
     for(size_t i=0, iend = vbMatchesInliers.size() ; i<iend; i++)
         if(vbMatchesInliers[i])
             N++;
 
     // Compute Essential Matrix from Fundamental Matrix
-    cv::Mat E21 = K.t()*F21*K;
+    cv::Mat E21 = K.t()*F21*K;      // 基本矩阵结合相机内参得到本质矩阵
 
     cv::Mat R1, R2, t;
 
     // Recover the 4 motion hypotheses
-    DecomposeE(E21,R1,R2,t);  
+    DecomposeE(E21,R1,R2,t);    // 分解本质矩阵
 
     cv::Mat t1=t;
     cv::Mat t2=-t;
 
-    // Reconstruct with the 4 hyphoteses and check
+    // Reconstruct with the 4 hyphoteses and check      检查四种解
     vector<cv::Point3f> vP3D1, vP3D2, vP3D3, vP3D4;
     vector<bool> vbTriangulated1,vbTriangulated2,vbTriangulated3, vbTriangulated4;
     float parallax1,parallax2, parallax3, parallax4;
@@ -501,7 +501,7 @@ bool Initializer::ReconstructF(vector<bool> &vbMatchesInliers, cv::Mat &F21, cv:
     R21 = cv::Mat();
     t21 = cv::Mat();
 
-    int nMinGood = max(static_cast<int>(0.9*N),minTriangulated);
+    int nMinGood = max(static_cast<int>(0.9*N),minTriangulated);    // minTriangulated为可以三角化恢复三维点的个数
 
     int nsimilar = 0;
     if(nGood1>0.7*maxGood)
@@ -522,7 +522,7 @@ bool Initializer::ReconstructF(vector<bool> &vbMatchesInliers, cv::Mat &F21, cv:
     // If best reconstruction has enough parallax initialize
     if(maxGood==nGood1)
     {
-        if(parallax1>minParallax)
+        if(parallax1>minParallax)       // 如果模型一对应的视差角大于最小值
         {
             vP3D = vP3D1;
             vbTriangulated = vbTriangulated1;
@@ -568,7 +568,7 @@ bool Initializer::ReconstructF(vector<bool> &vbMatchesInliers, cv::Mat &F21, cv:
 
     return false;
 }
-
+// 从单应性矩阵恢复位姿(SFM方法)
 bool Initializer::ReconstructH(vector<bool> &vbMatchesInliers, cv::Mat &H21, cv::Mat &K,
                       cv::Mat &R21, cv::Mat &t21, vector<cv::Point3f> &vP3D, vector<bool> &vbTriangulated, float minParallax, int minTriangulated)
 {
@@ -581,20 +581,20 @@ bool Initializer::ReconstructH(vector<bool> &vbMatchesInliers, cv::Mat &H21, cv:
     // Motion and structure from motion in a piecewise planar environment.
     // International Journal of Pattern Recognition and Artificial Intelligence, 1988
 
-    cv::Mat invK = K.inv();
+    cv::Mat invK = K.inv();  // 将H矩阵由图像坐标系变换到相机坐标系
     cv::Mat A = invK*H21*K;
 
     cv::Mat U,w,Vt,V;
     cv::SVD::compute(A,w,U,Vt,cv::SVD::FULL_UV);
     V=Vt.t();
-
-    float s = cv::determinant(U)*cv::determinant(Vt);
+    
+    float s = cv::determinant(U)*cv::determinant(Vt);        // cv::determinant(U)为U的行列式
 
     float d1 = w.at<float>(0);
     float d2 = w.at<float>(1);
     float d3 = w.at<float>(2);
 
-    if(d1/d2<1.00001 || d2/d3<1.00001)
+    if(d1/d2<1.00001 || d2/d3<1.00001)    //注意d1>d2>d3，看吴博讲解的ppt19页，只考虑d1!=d2!=d3的情况，其他情况返回失败
     {
         return false;
     }
@@ -695,7 +695,7 @@ bool Initializer::ReconstructH(vector<bool> &vbMatchesInliers, cv::Mat &H21, cv:
 
     // Instead of applying the visibility constraints proposed in the Faugeras' paper (which could fail for points seen with low parallax)
     // We reconstruct all hypotheses and check in terms of triangulated points and parallax
-    for(size_t i=0; i<8; i++)
+    for(size_t i=0; i<8; i++)   // 经过上面的计算，共有8种R、t计算结果，遍历这8种可能模型，通过计算出匹配点的三角化重投影成功的数量，来找出最好模型和次好模型
     {
         float parallaxi;
         vector<cv::Point3f> vP3Di;
@@ -730,7 +730,7 @@ bool Initializer::ReconstructH(vector<bool> &vbMatchesInliers, cv::Mat &H21, cv:
 
     return false;
 }
-
+// 三角化
 void Initializer::Triangulate(const cv::KeyPoint &kp1, const cv::KeyPoint &kp2, const cv::Mat &P1, const cv::Mat &P2, cv::Mat &x3D)
 {
     cv::Mat A(4,4,CV_32F);
@@ -745,7 +745,7 @@ void Initializer::Triangulate(const cv::KeyPoint &kp1, const cv::KeyPoint &kp2, 
     x3D = vt.row(3).t();
     x3D = x3D.rowRange(0,3)/x3D.at<float>(3);
 }
-
+// 特征点归一化(待归一化特征点集合，归一化后特征点集合，归一化所使用的矩阵)
 void Initializer::Normalize(const vector<cv::KeyPoint> &vKeys, vector<cv::Point2f> &vNormalizedPoints, cv::Mat &T)
 {
     float meanX = 0;
@@ -754,7 +754,7 @@ void Initializer::Normalize(const vector<cv::KeyPoint> &vKeys, vector<cv::Point2
 
     vNormalizedPoints.resize(N);
 
-    for(int i=0; i<N; i++)
+    for(int i=0; i<N; i++)  // 将所有vKeys点减去中心坐标，使x坐标和y坐标均值分别为0
     {
         meanX += vKeys[i].pt.x;
         meanY += vKeys[i].pt.y;
@@ -766,7 +766,7 @@ void Initializer::Normalize(const vector<cv::KeyPoint> &vKeys, vector<cv::Point2
     float meanDevX = 0;
     float meanDevY = 0;
 
-    for(int i=0; i<N; i++)
+    for(int i=0; i<N; i++)  // 将x坐标和y坐标分别进行缩放，使得x坐标和y坐标的一阶绝对矩分别为1
     {
         vNormalizedPoints[i].x = vKeys[i].pt.x - meanX;
         vNormalizedPoints[i].y = vKeys[i].pt.y - meanY;
@@ -794,7 +794,7 @@ void Initializer::Normalize(const vector<cv::KeyPoint> &vKeys, vector<cv::Point2
     T.at<float>(1,2) = -meanY*sY;
 }
 
-
+// 计算三角化重投影成功的数量
 int Initializer::CheckRT(const cv::Mat &R, const cv::Mat &t, const vector<cv::KeyPoint> &vKeys1, const vector<cv::KeyPoint> &vKeys2,
                        const vector<Match> &vMatches12, vector<bool> &vbMatchesInliers,
                        const cv::Mat &K, vector<cv::Point3f> &vP3D, float th2, vector<bool> &vbGood, float &parallax)
@@ -811,50 +811,50 @@ int Initializer::CheckRT(const cv::Mat &R, const cv::Mat &t, const vector<cv::Ke
     vector<float> vCosParallax;
     vCosParallax.reserve(vKeys1.size());
 
-    // Camera 1 Projection Matrix K[I|0]
+    // Camera 1 Projection Matrix K[I|0]    相机1的投影矩阵K[I|0]，世界坐标系和相机1坐标系相同
     cv::Mat P1(3,4,CV_32F,cv::Scalar(0));
     K.copyTo(P1.rowRange(0,3).colRange(0,3));
 
-    cv::Mat O1 = cv::Mat::zeros(3,1,CV_32F);
+    cv::Mat O1 = cv::Mat::zeros(3,1,CV_32F);    // 相机1的光心在世界坐标系坐标
 
-    // Camera 2 Projection Matrix K[R|t]
+    // Camera 2 Projection Matrix K[R|t]     相机2的投影矩阵
     cv::Mat P2(3,4,CV_32F);
     R.copyTo(P2.rowRange(0,3).colRange(0,3));
     t.copyTo(P2.rowRange(0,3).col(3));
     P2 = K*P2;
 
-    cv::Mat O2 = -R.t()*t;
+    cv::Mat O2 = -R.t()*t;      // 相机2的光心在世界坐标系坐标
 
     int nGood=0;
 
-    for(size_t i=0, iend=vMatches12.size();i<iend;i++)
+    for(size_t i=0, iend=vMatches12.size();i<iend;i++)  // 遍历所有的匹配点
     {
         if(!vbMatchesInliers[i])
             continue;
 
         const cv::KeyPoint &kp1 = vKeys1[vMatches12[i].first];
         const cv::KeyPoint &kp2 = vKeys2[vMatches12[i].second];
-        cv::Mat p3dC1;
+        cv::Mat p3dC1;  //3d点在相机1和世界坐标系下的坐标
+        // 输出的p3dC1是综合考虑了P1,P2的kp1,kp2匹配点在世界坐标系中的齐次坐标
+        Triangulate(kp1,kp2,P1,P2,p3dC1);   // 由于世界坐标系和相机1坐标系重合，所以p3dC1同时也是匹配点对应的空间点在相机1坐标系中的坐标
 
-        Triangulate(kp1,kp2,P1,P2,p3dC1);
-
-        if(!isfinite(p3dC1.at<float>(0)) || !isfinite(p3dC1.at<float>(1)) || !isfinite(p3dC1.at<float>(2)))
+        if(!isfinite(p3dC1.at<float>(0)) || !isfinite(p3dC1.at<float>(1)) || !isfinite(p3dC1.at<float>(2))) // 判断3d点前三位数值是否正常
         {
             vbGood[vMatches12[i].first]=false;
             continue;
         }
 
         // Check parallax
-        cv::Mat normal1 = p3dC1 - O1;
+        cv::Mat normal1 = p3dC1 - O1;    // normal1是相机1到3d点的向量
         float dist1 = cv::norm(normal1);
 
-        cv::Mat normal2 = p3dC1 - O2;
+        cv::Mat normal2 = p3dC1 - O2;   // normal2是相机2到3d点的向量
         float dist2 = cv::norm(normal2);
 
-        float cosParallax = normal1.dot(normal2)/(dist1*dist2);
+        float cosParallax = normal1.dot(normal2)/(dist1*dist2); // cosParallax为视差角的余弦，也就是normal1与normal2的余弦
 
         // Check depth in front of first camera (only if enough parallax, as "infinite" points can easily go to negative depth)
-        if(p3dC1.at<float>(2)<=0 && cosParallax<0.99998)
+        if(p3dC1.at<float>(2)<=0 && cosParallax<0.99998)    // 判断3D点是否在两个摄像头前方，视差角较大，且深度为负则淘汰
             continue;
 
         // Check depth in front of second camera (only if enough parallax, as "infinite" points can easily go to negative depth)
@@ -863,7 +863,7 @@ int Initializer::CheckRT(const cv::Mat &R, const cv::Mat &t, const vector<cv::Ke
         if(p3dC2.at<float>(2)<=0 && cosParallax<0.99998)
             continue;
 
-        // Check reprojection error in first image
+        // Check reprojection error in first image   计算3D点在第一个图像上的投影误差
         float im1x, im1y;
         float invZ1 = 1.0/p3dC1.at<float>(2);
         im1x = fx*p3dC1.at<float>(0)*invZ1+cx;
@@ -882,10 +882,10 @@ int Initializer::CheckRT(const cv::Mat &R, const cv::Mat &t, const vector<cv::Ke
 
         float squareError2 = (im2x-kp2.pt.x)*(im2x-kp2.pt.x)+(im2y-kp2.pt.y)*(im2y-kp2.pt.y);
 
-        if(squareError2>th2)
+        if(squareError2>th2)      // 重投影误差太大，淘汰
             continue;
 
-        vCosParallax.push_back(cosParallax);
+        vCosParallax.push_back(cosParallax);     // 统计经过检验的3D点个数，记录3D点视差角，到这里说明这对匹配点三角化重投影成功了
         vP3D[vMatches12[i].first] = cv::Point3f(p3dC1.at<float>(0),p3dC1.at<float>(1),p3dC1.at<float>(2));
         nGood++;
 
@@ -893,19 +893,19 @@ int Initializer::CheckRT(const cv::Mat &R, const cv::Mat &t, const vector<cv::Ke
             vbGood[vMatches12[i].first]=true;
     }
 
-    if(nGood>0)
+    if(nGood>0)  // 得到3D点中较大的视差角
     {
-        sort(vCosParallax.begin(),vCosParallax.end());
+        sort(vCosParallax.begin(),vCosParallax.end());  // 将视差角余弦有小到大排序
 
-        size_t idx = min(50,int(vCosParallax.size()-1));
-        parallax = acos(vCosParallax[idx])*180/CV_PI;
+        size_t idx = min(50,int(vCosParallax.size()-1));      // 取出第50个，或者最后那个也就是最大那个
+        parallax = acos(vCosParallax[idx])*180/CV_PI;    // 计算出视差角
     }
     else
         parallax=0;
 
     return nGood;
 }
-
+// 分解本质矩阵（SVD分解）
 void Initializer::DecomposeE(const cv::Mat &E, cv::Mat &R1, cv::Mat &R2, cv::Mat &t)
 {
     cv::Mat u,w,vt;
