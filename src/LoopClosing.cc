@@ -99,7 +99,7 @@ bool LoopClosing::CheckNewKeyFrames()
     unique_lock<mutex> lock(mMutexLoopQueue);
     return(!mlpLoopKeyFrameQueue.empty());
 }
-
+// 检测闭环
 bool LoopClosing::DetectLoop()
 {
     {
@@ -111,7 +111,7 @@ bool LoopClosing::DetectLoop()
     }
 
     //If the map contains less than 10 KF or less than 10 KF have passed from last loop detection
-    if(mpCurrentKF->mnId<mLastLoopKFid+10)
+    if(mpCurrentKF->mnId<mLastLoopKFid+10)      // 如果地图中的关键帧数小于10，那么不进行闭环检测
     {
         mpKeyFrameDB->add(mpCurrentKF);
         mpCurrentKF->SetErase();
@@ -124,7 +124,7 @@ bool LoopClosing::DetectLoop()
     const vector<KeyFrame*> vpConnectedKeyFrames = mpCurrentKF->GetVectorCovisibleKeyFrames();
     const DBoW2::BowVector &CurrentBowVec = mpCurrentKF->mBowVec;
     float minScore = 1;
-    for(size_t i=0; i<vpConnectedKeyFrames.size(); i++)
+    for(size_t i=0; i<vpConnectedKeyFrames.size(); i++)     // 获取共视关键帧，并计算他们和当前关键帧之间的BoW分数，求得最低分
     {
         KeyFrame* pKF = vpConnectedKeyFrames[i];
         if(pKF->isBad())
@@ -137,7 +137,7 @@ bool LoopClosing::DetectLoop()
             minScore = score;
     }
 
-    // Query the database imposing the minimum score
+    // Query the database imposing the minimum score    到数据库中查找出候选关键帧，这一步相当于是找到了曾经到过此处的关键帧们
     vector<KeyFrame*> vpCandidateKFs = mpKeyFrameDB->DetectLoopCandidates(mpCurrentKF, minScore);
 
     // If there are no loop candidates, just add new keyframe and return false
@@ -157,7 +157,7 @@ bool LoopClosing::DetectLoop()
 
     vector<ConsistentGroup> vCurrentConsistentGroups;
     vector<bool> vbConsistentGroup(mvConsistentGroups.size(),false);
-    for(size_t i=0, iend=vpCandidateKFs.size(); i<iend; i++)
+    for(size_t i=0, iend=vpCandidateKFs.size(); i<iend; i++)      // 对候选关键帧集进行连续性检测
     {
         KeyFrame* pCandidateKF = vpCandidateKFs[i];
 
@@ -170,13 +170,13 @@ bool LoopClosing::DetectLoop()
         {
             set<KeyFrame*> sPreviousGroup = mvConsistentGroups[iG].first;
 
-            bool bConsistent = false;
+            bool bConsistent = false;       // 遍历每个“候选组”，检测候选组中每一个关键帧在“连续组”中是否存在
             for(set<KeyFrame*>::iterator sit=spCandidateGroup.begin(), send=spCandidateGroup.end(); sit!=send;sit++)
             {
                 if(sPreviousGroup.count(*sit))
                 {
                     bConsistent=true;
-                    bConsistentForSomeGroup=true;
+                    bConsistentForSomeGroup=true;       // 该“候选组”至少与一个”连续组“相连
                     break;
                 }
             }
@@ -200,10 +200,10 @@ bool LoopClosing::DetectLoop()
         }
 
         // If the group is not consistent with any previous group insert with consistency counter set to zero
-        if(!bConsistentForSomeGroup)
+        if(!bConsistentForSomeGroup)        // 如果该“候选组”的所有关键帧都不存在于“连续组”，那么vCurrentConsistentGroups将为空，
         {
-            ConsistentGroup cg = make_pair(spCandidateGroup,0);
-            vCurrentConsistentGroups.push_back(cg);
+            ConsistentGroup cg = make_pair(spCandidateGroup,0); // 于是就把“子候选组”全部拷贝到vCurrentConsistentGroups，
+            vCurrentConsistentGroups.push_back(cg);         // 并最终用于更新mvConsistentGroups，计数设为0，重新开始
         }
     }
 
@@ -227,7 +227,7 @@ bool LoopClosing::DetectLoop()
     mpCurrentKF->SetErase();
     return false;
 }
-
+// 计算两帧之间的相对位姿
 bool LoopClosing::ComputeSim3()
 {
     // For each consistent loop candidate we try to compute a Sim3
@@ -398,7 +398,7 @@ bool LoopClosing::ComputeSim3()
     }
 
 }
-
+// 根据闭环做校正
 void LoopClosing::CorrectLoop()
 {
     cout << "Loop detected!" << endl;
